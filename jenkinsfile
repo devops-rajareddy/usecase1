@@ -1,23 +1,52 @@
 pipeline {
     agent any
-    
+    environment {
+        MY_CRED = credentials('azuresp')
+    }
     stages {
-      withCredentials([azureServicePrincipal('azure-sp')])  {
-      stage('Init') {
-         steps {
-           sh 'terraform init'
-           
-           }
-           }
-           
-          stage('Apply') {
-          steps {
-          
-          sh 'terraform apply'
-          }
-          }
-          }
-          
-          }
-          
-          }
+        stage('Checkout') {
+            steps {
+                // Checkout your Git repository
+                git url: 'https://github.com/devops-rajareddy/usecase1.git'
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                // Initialize Terraform
+                dir ( '/var/lib/jenkins/workspace/jatincode' ){
+                script { 
+                    sh 'terraform init'
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                // Apply Terraform changes
+                dir ('/var/lib/jenkins/workspace/jatincode'){
+                script {
+                    withCredentials([azureServicePrincipal(credentialsId: 'azuresp', variable: 'azuresp')]) {
+                        // Set Azure credentials
+                        sh 'az login --service-principal -u $MY_CRED_CLIENT_ID -p $MY_CRED_CLIENT_SECRET -t $MY_CRED_TENANT_ID'
+                        sh 'export ARM_CLIENT_ID=$MY_CRED_CLIENT_ID'
+                        sh 'export ARM_CLIENT_SECRET=$MY_CRED_CLIENT_SECRET'
+                        sh 'export ARM_SUBSCRIPTION_ID=$MY_CRED_SUBSCRIPTION_ID'
+                        sh 'export ARM_TENANT_ID=$MY_CRED_TENANT_ID'
+
+                        // Run Terraform apply
+                        sh 'sudo terraform apply -auto-approve'
+                        }
+                    }
+                }
+            }
+        }
+    }
+post {
+        success {
+            // Clean up, e.g., destroy resources (optional)
+            sh 'terraform destroy -auto-approve'
+        }
+    }
+}
